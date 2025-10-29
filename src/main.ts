@@ -1,0 +1,506 @@
+/**
+ * Main CLI interface for the Computer Use Agent
+ * Provides an interactive command-line interface for executing bash commands through natural language
+ */
+
+import chalk from 'chalk';
+import ora from 'ora';
+import inquirer from 'inquirer';
+import { program } from 'commander';
+import { Config, getConfig } from './config.js';
+import { Bash } from './bash.js';
+import { MessageManager } from './messages.js';
+import { LLMClient, type LLMResponse } from './llm.js';
+import type {
+  CLIOptions,
+  UserInput,
+  CommandResult,
+  ToolCall
+} from './types.js';
+import {
+  AgentError
+} from './types.js';
+
+/**
+ * CLI application class that manages the interactive session
+ */
+class CLIApplication {
+  private readonly _config: Config;
+  private readonly _bash: Bash;
+  private readonly _llm: LLMClient;
+  private readonly _messages: MessageManager;
+  private readonly _options: CLIOptions;
+  private _isRunning: boolean = true;
+
+  /**
+   * Initialize the CLI application
+   * @param options - CLI options from command line arguments
+   */
+  constructor(options: CLIOptions = {}) {
+    this._options = options;
+
+    try {
+      // Initialize configuration and components
+      this._config = getConfig();
+      this._bash = new Bash(this._config);
+      this._llm = new LLMClient(this._config);
+      this._messages = new MessageManager(this._config.systemPrompt, 50);
+
+      // Override config with command line options
+      this._applyCLIOptions();
+    } catch (error) {
+      if (error instanceof AgentError) {
+        this._printError(error.message);
+        process.exit(1);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Apply command line options to configuration
+   * @private
+   */
+  private _applyCLIOptions(): void {
+    // Note: Config properties are readonly by design
+    // CLI options override will need to be handled differently
+    // For now, we'll set environment variables
+
+    if (this._options.verbose) {
+      process.env['NODE_ENV'] = 'development';
+    }
+  }
+
+  /**
+   * Start the interactive CLI session
+   */
+  async start(): Promise<void> {
+    this._printWelcome();
+
+    // Test LLM connection in verbose mode
+    if (this._options.verbose) {
+      await this._testLLMConnection();
+    }
+
+    // Main interaction loop
+    while (this._isRunning) {
+      try {
+        await this._handleUserInput();
+      } catch (error) {
+        this._handleError(error);
+      }
+    }
+
+    this._printGoodbye();
+  }
+
+  /**
+   * Print welcome message and help information
+   * @private
+   */
+  private _printWelcome(): void {
+    console.log(chalk.cyan('\n' + '='.repeat(60)));
+    console.log(chalk.bold('🚀 COMPUTER USE AGENT'));
+    console.log(chalk.cyan('='.repeat(60)));
+    console.log(chalk.gray(`\n[INFO] Type ${chalk.yellow('quit')} or ${chalk.yellow('exit')} at any time to exit`));
+    console.log(chalk.gray(`[INFO] Type ${chalk.yellow('help')} for examples of what you can do`));
+    console.log(chalk.gray(`[INFO] Current working directory: ${chalk.blue(this._bash.cwd)}`));
+    console.log(chalk.gray(`[INFO] Using model: ${chalk.blue(this._config.llm.modelName)}`));
+    console.log(chalk.cyan('='.repeat(60) + '\n'));
+  }
+
+  /**
+   * Test LLM connection and report status
+   * @private
+   */
+  private async _testLLMConnection(): Promise<void> {
+    const spinner = ora('Testing LLM connection...').start();
+
+    try {
+      const isConnected = await this._llm.testConnection();
+
+      if (isConnected) {
+        spinner.succeed(chalk.green('LLM connection successful'));
+      } else {
+        spinner.fail(chalk.red('LLM connection failed'));
+        console.log(chalk.yellow('\n[WARNING] Please check your API key and network connection'));
+      }
+    } catch (error) {
+      spinner.fail(chalk.red('LLM connection test failed'));
+      console.error(chalk.red(`[ERROR] ${error}`));
+    }
+  }
+
+  /**
+   * Handle user input from the command line
+   * @private
+   */
+  private async _handleUserInput(): Promise<void> {
+    // Get user input
+    const { input } = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'input',
+        message: chalk.blue(`[${this._bash.cwd}] 👤 You:`),
+        validate: (input: string) => {
+          if (!input.trim()) {
+            return 'Please enter a command or question';
+          }
+          return true;
+        },
+      },
+    ]);
+
+    const userInput = input.trim().toLowerCase();
+
+    // Handle special commands
+    if (this._handleSpecialCommands(userInput)) {
+      return;
+    }
+
+    // Add context to user input
+    const inputWithContext = `${input}\n\nCurrent working directory: \`${this._bash.cwd}\``;
+
+    // Add user message to conversation
+    this._messages.addUserMessage(inputWithContext);
+
+    // Process the request with LLM
+    await this._processRequest();
+  }
+
+  /**
+   * Handle special CLI commands
+   * @param input - User input (lowercase)
+   * @returns True if a special command was handled
+   * @private
+   */
+  private _handleSpecialCommands(input: string): boolean {
+    switch (input) {
+      case 'quit':
+      case 'exit':
+      case 'q':
+        this._isRunning = false;
+        return true;
+
+      case 'help':
+        this._printHelp();
+        return true;
+
+      case 'clear':
+        console.clear();
+        this._printWelcome();
+        return true;
+
+      case 'stats':
+        this._printStats();
+        return true;
+
+      case 'cwd':
+        console.log(chalk.blue(`Current directory: ${this._bash.cwd}`));
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Process user request with the LLM
+   * @private
+   */
+  private async _processRequest(): Promise<void> {
+    // Continue processing until no more tool calls
+    while (true) {
+      // Show thinking indicator
+      const spinner = ora(chalk.gray('🤖 Thinking...')).start();
+
+      try {
+        // Query the LLM
+        const response: LLMResponse = await this._llm.query(
+          this._messages,
+          [this._bash.getToolSchema()]
+        );
+
+        spinner.stop();
+
+        // Handle assistant's text response
+        if (response.message) {
+          const content = this._filterThinkDirective(response.message);
+          if (content) {
+            console.log(chalk.green(`\n🤖: ${content}`));
+            this._messages.addAssistantMessage(content);
+          }
+        }
+
+        // Handle tool calls (execute bash commands)
+        if (response.toolCalls.length > 0) {
+          await this._handleToolCalls(response.toolCalls);
+          // After executing commands, break to wait for user input
+          break;
+        }
+
+        // No more tool calls, exit loop
+        break;
+
+      } catch (error) {
+        spinner.stop();
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Handle tool calls from the LLM
+   * @param toolCalls - Array of tool calls to execute
+   * @private
+   */
+  private async _handleToolCalls(toolCalls: ToolCall[]): Promise<void> {
+    for (const toolCall of toolCalls) {
+      if (toolCall.function.name !== 'exec_bash_command') {
+        console.log(chalk.yellow(`\n⚠️  Unknown function called: ${toolCall.function.name}`));
+        this._messages.addToolMessage(
+          `Unknown function: ${toolCall.function.name}`,
+          toolCall.id
+        );
+        continue;
+      }
+
+      // Parse command arguments
+      const args = JSON.parse(toolCall.function.arguments);
+      const command = args.cmd;
+
+      if (!command) {
+        console.log(chalk.yellow('\n⚠️  No command provided'));
+        this._messages.addToolMessage('No command provided', toolCall.id);
+        continue;
+      }
+
+      // Show suggested command
+      console.log(chalk.cyan(`\n[🛠️] Suggested command: ${chalk.yellow(command)}`));
+
+      // Ask for confirmation unless in non-interactive mode
+      let shouldExecute = this._options.nonInteractive ?? false;
+
+      if (!shouldExecute) {
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirm',
+            message: chalk.blue('▶️  Execute this command?'),
+            default: true,
+          },
+        ]);
+        shouldExecute = confirm;
+      }
+
+      if (shouldExecute) {
+        // Execute the command
+        const spinner = ora(chalk.blue('⚡ Executing...')).start();
+
+        try {
+          const result = await this._bash.execBashCommand(command);
+          spinner.stop();
+
+          // Display results
+          this._displayCommandResult(result);
+
+          // Add result to messages
+          const toolResult = {
+            stdout: result.stdout || '',
+            stderr: result.stderr || '',
+            cwd: result.cwd,
+            exitCode: result.exitCode || 0,
+          };
+
+          this._messages.addToolMessage(
+            JSON.stringify(toolResult),
+            toolCall.id
+          );
+        } catch (error) {
+          spinner.stop();
+          console.log(chalk.red(`\n❌ Error: ${error}`));
+          this._messages.addToolMessage(
+            `Error: ${error}`,
+            toolCall.id
+          );
+        }
+      } else {
+        // Command cancelled by user
+        console.log(chalk.red('\n[❌] Command execution cancelled'));
+        this._messages.addToolMessage(
+          'Command cancelled by user',
+          toolCall.id
+        );
+      }
+    }
+  }
+
+  /**
+   * Display command execution result
+   * @param result - Command execution result
+   * @private
+   */
+  private _displayCommandResult(result: CommandResult): void {
+    if (result.error) {
+      console.log(chalk.red(`\n❌ Error: ${result.error}`));
+      return;
+    }
+
+    // Display stdout
+    if (result.stdout) {
+      console.log(chalk.green('\n📤 Output:'));
+      console.log(chalk.white(result.stdout));
+    }
+
+    // Display stderr
+    if (result.stderr) {
+      console.log(chalk.yellow('\n⚠️  Stderr:'));
+      console.log(chalk.white(result.stderr));
+    }
+
+    // Show exit code if available and not 0
+    if (result.exitCode !== undefined && result.exitCode !== 0) {
+      console.log(chalk.red(`\n📊 Exit code: ${result.exitCode}`));
+    }
+
+    // Update working directory if it changed
+    if (result.cwd !== this._bash.cwd) {
+      // This is handled internally by the Bash class
+      console.log(chalk.dim(`\n📁 Working directory: ${result.cwd}`));
+    }
+  }
+
+  /**
+   * Filter out the /think directive from assistant responses
+   * @param content - Raw content from assistant
+   * @returns Filtered content
+   * @private
+   */
+  private _filterThinkDirective(content: string): string {
+    if (content.startsWith('/think')) {
+      return content.substring(5).trim();
+    }
+    return content.trim();
+  }
+
+  /**
+   * Print help information
+   * @private
+   */
+  private _printHelp(): void {
+    console.log(chalk.cyan('\n📚 Examples of what you can ask:'));
+    console.log(chalk.white('  • ') + chalk.gray('List all files in the current directory'));
+    console.log(chalk.white('  • ') + chalk.gray('Open Chrome browser'));
+    console.log(chalk.white('  • ') + chalk.gray('Open https://google.com in my browser'));
+    console.log(chalk.white('  • ') + chalk.gray('Create a new folder called test'));
+    console.log(chalk.white('  • ') + chalk.gray('Show me what Python is installed'));
+    console.log(chalk.white('  • ') + chalk.gray("What's the current date and time?"));
+    console.log(chalk.white('  • ') + chalk.gray('Find all TypeScript files in this directory'));
+    console.log(chalk.white('  • ') + chalk.gray('Show system information'));
+
+    console.log(chalk.cyan('\n📝 Available commands:'));
+    const commands = this._config.security.allowedCommands.slice(0, 15);
+    console.log(chalk.gray('  ') + commands.join(', ') + chalk.gray(', ...'));
+
+    console.log(chalk.cyan('\n⌨️  Special commands:'));
+    console.log(chalk.white('  • ') + chalk.yellow('help') + chalk.gray(' - Show this help message'));
+    console.log(chalk.white('  • ') + chalk.yellow('clear') + chalk.gray(' - Clear the screen'));
+    console.log(chalk.white('  • ') + chalk.yellow('stats') + chalk.gray(' - Show conversation statistics'));
+    console.log(chalk.white('  • ') + chalk.yellow('cwd') + chalk.gray(' - Show current directory'));
+    console.log(chalk.white('  • ') + chalk.yellow('quit') + chalk.gray(' - Exit the agent'));
+  }
+
+  /**
+   * Print conversation statistics
+   * @private
+   */
+  private _printStats(): void {
+    const stats = this._messages.getStats();
+    console.log(chalk.cyan('\n📊 Conversation Statistics:'));
+    console.log(chalk.white(`  • Total messages: ${stats.totalMessages}`));
+    console.log(chalk.white(`  • User messages: ${stats.messageCounts.user}`));
+    console.log(chalk.white(`  • Assistant messages: ${stats.messageCounts.assistant}`));
+    console.log(chalk.white(`  • Tool calls: ${stats.totalToolCalls}`));
+    console.log(chalk.white(`  • Current directory: ${chalk.blue(this._bash.cwd)}`));
+    console.log(chalk.white(`  • Model: ${chalk.blue(this._config.llm.modelName)}`));
+  }
+
+  /**
+   * Handle errors gracefully
+   * @param error - Error to handle
+   * @private
+   */
+  private _handleError(error: unknown): void {
+    if (error instanceof AgentError) {
+      this._printError(error.message);
+    } else if (error instanceof Error) {
+      this._printError(`Unexpected error: ${error.message}`);
+      if (this._options.verbose) {
+        console.error(chalk.red(error.stack));
+      }
+    } else {
+      this._printError(`Unknown error: ${error}`);
+    }
+  }
+
+  /**
+   * Print error message
+   * @param message - Error message to print
+   * @private
+   */
+  private _printError(message: string): void {
+    console.log(chalk.red(`\n❌ Error: ${message}`));
+  }
+
+  /**
+   * Print goodbye message
+   * @private
+   */
+  private _printGoodbye(): void {
+    console.log(chalk.cyan('\n[🤖] Shutting down. Bye! 👋\n'));
+  }
+}
+
+/**
+ * Main entry point
+ */
+async function main(): Promise<void> {
+  // Setup command line program
+  program
+    .name('cua')
+    .description('Computer Use Agent - Interactive CLI for bash command execution')
+    .version('1.0.0')
+    .option('-v, --verbose', 'Enable verbose output')
+    .option('-c, --config <path>', 'Path to configuration file')
+    .option('-k, --api-key <key>', 'Override API key')
+    .option('-m, --model <model>', 'Override LLM model')
+    .option('-n, --non-interactive', 'Run without command confirmation')
+    .parse();
+
+  const options = program.opts() as CLIOptions;
+
+  // Create and start the CLI application
+  const app = new CLIApplication(options);
+
+  // Handle graceful shutdown
+  process.on('SIGINT', () => {
+    console.log(chalk.yellow('\n\n[🤖] Interrupted by user. Shutting down gracefully...'));
+    process.exit(0);
+  });
+
+  process.on('SIGTERM', () => {
+    console.log(chalk.yellow('\n\n[🤖] Received termination signal. Shutting down gracefully...'));
+    process.exit(0);
+  });
+
+  // Start the application
+  await app.start();
+}
+
+// Run the application if this file is executed directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(error => {
+    console.error(chalk.red('Fatal error:'), error);
+    process.exit(1);
+  });
+}

@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+/**
+ * Computer Use Agent CLI executable
+ */
+
+import '../dist/main.js';

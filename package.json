@@ -1,0 +1,56 @@
+{
+  "name": "computer-use-agent",
+  "version": "1.0.0",
+  "description": "An interactive CLI agent that can execute bash commands safely through natural language",
+  "main": "dist/main.js",
+  "bin": {
+    "cua": "dist/main.js"
+  },
+  "scripts": {
+    "start": "node dist/main.js",
+    "dev": "ts-node-esm src/main.ts",
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "node dist/test.js",
+    "prepare": "npm run clean && npm run build",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write src/**/*.ts"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "bash",
+    "agent",
+    "openai",
+    "assistant",
+    "terminal",
+    "shell"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.28.4",
+    "dotenv": "^16.4.5",
+    "inquirer": "^9.2.23",
+    "chalk": "^5.3.0",
+    "zod": "^3.23.8",
+    "execa": "^8.0.1",
+    "ora": "^8.0.1",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/inquirer": "^9.0.7",
+    "@typescript-eslint/eslint-plugin": "^7.1.1",
+    "@typescript-eslint/parser": "^7.1.1",
+    "eslint": "^8.57.0",
+    "prettier": "^3.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "type": "module"
+}
