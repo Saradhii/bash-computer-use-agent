@@ -1,10 +1,9 @@
 /**
  * Main CLI interface for the Computer Use Agent
  * Provides an interactive command-line interface for executing bash commands through natural language
+ * Based on NVIDIA's official implementation with minimal UI
  */
 
-import chalk from 'chalk';
-import ora from 'ora';
 import inquirer from 'inquirer';
 import { program } from 'commander';
 import { Config, getConfig } from './config.js';
@@ -99,14 +98,10 @@ class CLIApplication {
    * @private
    */
   private _printWelcome(): void {
-    console.log(chalk.cyan('\n' + '='.repeat(60)));
-    console.log(chalk.bold('🚀 COMPUTER USE AGENT'));
-    console.log(chalk.cyan('='.repeat(60)));
-    console.log(chalk.gray(`\n[INFO] Type ${chalk.yellow('quit')} or ${chalk.yellow('exit')} at any time to exit`));
-    console.log(chalk.gray(`[INFO] Type ${chalk.yellow('help')} for examples of what you can do`));
-    console.log(chalk.gray(`[INFO] Current working directory: ${chalk.blue(this._bash.cwd)}`));
-    console.log(chalk.gray(`[INFO] Using model: ${chalk.blue(this._config.llm.modelName)}`));
-    console.log(chalk.cyan('='.repeat(60) + '\n'));
+    console.log('-'.repeat(80));
+    console.log('BASH COMPUTER USE AGENT');
+    console.log('-'.repeat(80));
+    console.log(`[INFO] Type 'quit' to exit`);
   }
 
   /**
@@ -114,20 +109,20 @@ class CLIApplication {
    * @private
    */
   private async _testLLMConnection(): Promise<void> {
-    const spinner = ora('Testing LLM connection...').start();
+    console.log('Testing LLM connection...');
 
     try {
       const isConnected = await this._llm.testConnection();
 
       if (isConnected) {
-        spinner.succeed(chalk.green('LLM connection successful'));
+        console.log('LLM connection successful');
       } else {
-        spinner.fail(chalk.red('LLM connection failed'));
-        console.log(chalk.yellow('\n[WARNING] Please check your API key and network connection'));
+        console.log('LLM connection failed');
+        console.log('[WARNING] Please check your API key and network connection');
       }
     } catch (error) {
-      spinner.fail(chalk.red('LLM connection test failed'));
-      console.error(chalk.red(`[ERROR] ${error}`));
+      console.log('LLM connection test failed');
+      console.error(`[ERROR] ${error}`);
     }
   }
 
@@ -136,12 +131,12 @@ class CLIApplication {
    * @private
    */
   private async _handleUserInput(): Promise<void> {
-    // Get user input
+    // Get user input - NVIDIA style prompt
     const { input } = await inquirer.prompt([
       {
         type: 'input',
         name: 'input',
-        message: chalk.blue(`[${this._bash.cwd}] 👤 You:`),
+        message: `[${this._bash.cwd}] 🙂] `,
         validate: (input: string) => {
           if (!input.trim()) {
             return 'Please enter a command or question';
@@ -151,7 +146,7 @@ class CLIApplication {
       },
     ]);
 
-    const userInput = input.trim().toLowerCase();
+    const userInput = input.trim();
 
     // Handle special commands
     if (this._handleSpecialCommands(userInput)) {
@@ -159,7 +154,7 @@ class CLIApplication {
     }
 
     // Add context to user input
-    const inputWithContext = `${input}\n\nCurrent working directory: \`${this._bash.cwd}\``;
+    const inputWithContext = `${userInput}\n\nCurrent working directory: \`${this._bash.cwd}\``;
 
     // Add user message to conversation
     this._messages.addUserMessage(inputWithContext);
@@ -182,21 +177,13 @@ class CLIApplication {
         this._isRunning = false;
         return true;
 
-      case 'help':
-        this._printHelp();
-        return true;
-
       case 'clear':
         console.clear();
         this._printWelcome();
         return true;
 
-      case 'stats':
-        this._printStats();
-        return true;
-
       case 'cwd':
-        console.log(chalk.blue(`Current directory: ${this._bash.cwd}`));
+        console.log(`Current directory: ${this._bash.cwd}`);
         return true;
 
       default:
@@ -211,8 +198,8 @@ class CLIApplication {
   private async _processRequest(): Promise<void> {
     // Continue processing until no more tool calls
     while (true) {
-      // Show thinking indicator
-      const spinner = ora(chalk.gray('🤖 Thinking...')).start();
+      // Show thinking indicator (NVIDIA style - simple text)
+      console.log('Thinking...');
 
       try {
         // Query the LLM
@@ -221,13 +208,11 @@ class CLIApplication {
           [this._bash.getToolSchema()]
         );
 
-        spinner.stop();
-
         // Handle assistant's text response
         if (response.message) {
           const content = this._filterThinkDirective(response.message);
           if (content) {
-            console.log(chalk.green(`\n🤖: ${content}`));
+            console.log(`\n${content}`);
             this._messages.addAssistantMessage(content);
           }
         }
@@ -243,7 +228,6 @@ class CLIApplication {
         break;
 
       } catch (error) {
-        spinner.stop();
         throw error;
       }
     }
@@ -257,7 +241,7 @@ class CLIApplication {
   private async _handleToolCalls(toolCalls: ToolCall[]): Promise<void> {
     for (const toolCall of toolCalls) {
       if (toolCall.function.name !== 'exec_bash_command') {
-        console.log(chalk.yellow(`\n⚠️  Unknown function called: ${toolCall.function.name}`));
+        console.log(`Unknown function called: ${toolCall.function.name}`);
         this._messages.addToolMessage(
           `Unknown function: ${toolCall.function.name}`,
           toolCall.id
@@ -270,38 +254,40 @@ class CLIApplication {
       const command = args.cmd;
 
       if (!command) {
-        console.log(chalk.yellow('\n⚠️  No command provided'));
+        console.log('No command provided');
         this._messages.addToolMessage('No command provided', toolCall.id);
         continue;
       }
 
-      // Show suggested command
-      console.log(chalk.cyan(`\n[🛠️] Suggested command: ${chalk.yellow(command)}`));
+      // Ask for confirmation - NVIDIA style
+      console.log(`\n▶️ Execute '${command}'? [y/N]:`);
 
-      // Ask for confirmation unless in non-interactive mode
-      let shouldExecute = this._options.nonInteractive ?? false;
-
-      if (!shouldExecute) {
-        const { confirm } = await inquirer.prompt([
-          {
-            type: 'confirm',
-            name: 'confirm',
-            message: chalk.blue('▶️  Execute this command?'),
-            default: true,
+      // Get user confirmation (simple input, not inquirer confirm)
+      const { confirm } = await inquirer.prompt([
+        {
+          type: 'input',
+          name: 'confirm',
+          message: '',
+          validate: (input: string) => {
+            const answer = input.trim().toLowerCase();
+            if (answer === 'y' || answer === 'n' || answer === '') {
+              return true;
+            }
+            return 'Please enter y or n';
           },
-        ]);
-        shouldExecute = confirm;
-      }
+        },
+      ]);
+
+      const shouldExecute = confirm.trim().toLowerCase() === 'y';
 
       if (shouldExecute) {
         // Execute the command
-        const spinner = ora(chalk.blue('⚡ Executing...')).start();
+        console.log('Executing...');
 
         try {
           const result = await this._bash.execBashCommand(command);
-          spinner.stop();
 
-          // Display results
+          // Display results - NVIDIA style (raw output)
           this._displayCommandResult(result);
 
           // Add result to messages
@@ -317,8 +303,7 @@ class CLIApplication {
             toolCall.id
           );
         } catch (error) {
-          spinner.stop();
-          console.log(chalk.red(`\n❌ Error: ${error}`));
+          console.log(`Error: ${error}`);
           this._messages.addToolMessage(
             `Error: ${error}`,
             toolCall.id
@@ -326,7 +311,7 @@ class CLIApplication {
         }
       } else {
         // Command cancelled by user
-        console.log(chalk.red('\n[❌] Command execution cancelled'));
+        console.log('Command execution cancelled');
         this._messages.addToolMessage(
           'Command cancelled by user',
           toolCall.id
@@ -342,31 +327,18 @@ class CLIApplication {
    */
   private _displayCommandResult(result: CommandResult): void {
     if (result.error) {
-      console.log(chalk.red(`\n❌ Error: ${result.error}`));
+      console.log(`Error: ${result.error}`);
       return;
     }
 
-    // Display stdout
+    // Display stdout (NVIDIA style - raw output)
     if (result.stdout) {
-      console.log(chalk.green('\n📤 Output:'));
-      console.log(chalk.white(result.stdout));
+      console.log(result.stdout);
     }
 
-    // Display stderr
+    // Display stderr (NVIDIA style - raw output)
     if (result.stderr) {
-      console.log(chalk.yellow('\n⚠️  Stderr:'));
-      console.log(chalk.white(result.stderr));
-    }
-
-    // Show exit code if available and not 0
-    if (result.exitCode !== undefined && result.exitCode !== 0) {
-      console.log(chalk.red(`\n📊 Exit code: ${result.exitCode}`));
-    }
-
-    // Update working directory if it changed
-    if (result.cwd !== this._bash.cwd) {
-      // This is handled internally by the Bash class
-      console.log(chalk.dim(`\n📁 Working directory: ${result.cwd}`));
+      console.error(result.stderr);
     }
   }
 
@@ -384,48 +356,6 @@ class CLIApplication {
   }
 
   /**
-   * Print help information
-   * @private
-   */
-  private _printHelp(): void {
-    console.log(chalk.cyan('\n📚 Examples of what you can ask:'));
-    console.log(chalk.white('  • ') + chalk.gray('List all files in the current directory'));
-    console.log(chalk.white('  • ') + chalk.gray('Open Chrome browser'));
-    console.log(chalk.white('  • ') + chalk.gray('Open https://google.com in my browser'));
-    console.log(chalk.white('  • ') + chalk.gray('Create a new folder called test'));
-    console.log(chalk.white('  • ') + chalk.gray('Show me what Python is installed'));
-    console.log(chalk.white('  • ') + chalk.gray("What's the current date and time?"));
-    console.log(chalk.white('  • ') + chalk.gray('Find all TypeScript files in this directory'));
-    console.log(chalk.white('  • ') + chalk.gray('Show system information'));
-
-    console.log(chalk.cyan('\n📝 Available commands:'));
-    const commands = this._config.security.allowedCommands.slice(0, 15);
-    console.log(chalk.gray('  ') + commands.join(', ') + chalk.gray(', ...'));
-
-    console.log(chalk.cyan('\n⌨️  Special commands:'));
-    console.log(chalk.white('  • ') + chalk.yellow('help') + chalk.gray(' - Show this help message'));
-    console.log(chalk.white('  • ') + chalk.yellow('clear') + chalk.gray(' - Clear the screen'));
-    console.log(chalk.white('  • ') + chalk.yellow('stats') + chalk.gray(' - Show conversation statistics'));
-    console.log(chalk.white('  • ') + chalk.yellow('cwd') + chalk.gray(' - Show current directory'));
-    console.log(chalk.white('  • ') + chalk.yellow('quit') + chalk.gray(' - Exit the agent'));
-  }
-
-  /**
-   * Print conversation statistics
-   * @private
-   */
-  private _printStats(): void {
-    const stats = this._messages.getStats();
-    console.log(chalk.cyan('\n📊 Conversation Statistics:'));
-    console.log(chalk.white(`  • Total messages: ${stats.totalMessages}`));
-    console.log(chalk.white(`  • User messages: ${stats.messageCounts.user}`));
-    console.log(chalk.white(`  • Assistant messages: ${stats.messageCounts.assistant}`));
-    console.log(chalk.white(`  • Tool calls: ${stats.totalToolCalls}`));
-    console.log(chalk.white(`  • Current directory: ${chalk.blue(this._bash.cwd)}`));
-    console.log(chalk.white(`  • Model: ${chalk.blue(this._config.llm.modelName)}`));
-  }
-
-  /**
    * Handle errors gracefully
    * @param error - Error to handle
    * @private
@@ -436,7 +366,7 @@ class CLIApplication {
     } else if (error instanceof Error) {
       this._printError(`Unexpected error: ${error.message}`);
       if (this._options.verbose) {
-        console.error(chalk.red(error.stack));
+        console.error(error.stack);
       }
     } else {
       this._printError(`Unknown error: ${error}`);
@@ -449,7 +379,7 @@ class CLIApplication {
    * @private
    */
   private _printError(message: string): void {
-    console.log(chalk.red(`\n❌ Error: ${message}`));
+    console.log(`Error: ${message}`);
   }
 
   /**
@@ -457,7 +387,7 @@ class CLIApplication {
    * @private
    */
   private _printGoodbye(): void {
-    console.log(chalk.cyan('\n[🤖] Shutting down. Bye! 👋\n'));
+    console.log('Shutting down. Bye!');
   }
 }
 
@@ -484,12 +414,12 @@ async function main(): Promise<void> {
 
   // Handle graceful shutdown
   process.on('SIGINT', () => {
-    console.log(chalk.yellow('\n\n[🤖] Interrupted by user. Shutting down gracefully...'));
+    console.log('\nInterrupted by user. Shutting down gracefully...');
     process.exit(0);
   });
 
   process.on('SIGTERM', () => {
-    console.log(chalk.yellow('\n\n[🤖] Received termination signal. Shutting down gracefully...'));
+    console.log('\nReceived termination signal. Shutting down gracefully...');
     process.exit(0);
   });
 
@@ -500,7 +430,7 @@ async function main(): Promise<void> {
 // Run the application if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
-    console.error(chalk.red('Fatal error:'), error);
+    console.error('Fatal error:', error);
     process.exit(1);
   });
 }
