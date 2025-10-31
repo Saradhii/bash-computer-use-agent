@@ -6,12 +6,14 @@
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
+import { existsSync } from 'fs';
 import type {
   AppConfig,
   LLMConfig,
   SecurityConfig,
   EnvVars,
-  ToolSchema
+  ToolSchema,
+  ModelConfig
 } from './types.js';
 import {
   AgentError,
@@ -27,6 +29,26 @@ config();
  */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Available LLM models for the agent
+ */
+export const AVAILABLE_MODELS: readonly ModelConfig[] = Object.freeze([
+  {
+    name: 'Llama 3.3 70B Instruct',
+    id: 'meta-llama/llama-3.3-70b-instruct:free',
+    description: 'Best overall - Strong function calling, 70B params (Meta)',
+    license: 'Llama 3.3 License',
+    recommended: true,
+  },
+  {
+    name: 'NVIDIA Nemotron Nano 9B',
+    id: 'nvidia/nemotron-nano-9b-v2:free',
+    description: 'Lightweight alternative - 9B params, fast (NVIDIA)',
+    license: 'NVIDIA Open Model',
+    recommended: false,
+  },
+] as const);
 
 /**
  * Default allowed commands for the bash agent
@@ -197,14 +219,18 @@ export class Config {
   private readonly _security: SecurityConfig;
   private readonly _rootDir: string;
 
-  constructor() {
+  /**
+   * Initialize configuration
+   * @param modelName - Optional model name to override default
+   */
+  constructor(modelName?: string) {
     // Validate environment variables
     const env = this.validateEnv();
 
     // Initialize LLM configuration
     this._llm = Object.freeze({
       baseUrl: env.LLM_BASE_URL,
-      modelName: env.LLM_MODEL_NAME,
+      modelName: modelName || env.LLM_MODEL_NAME,
       apiKey: env.OPENROUTER_API_KEY,
       temperature: env.LLM_TEMPERATURE,
       topP: env.LLM_TOP_P,
@@ -226,9 +252,33 @@ export class Config {
    * @throws {AgentError} If required environment variables are missing
    */
   private validateEnv(): EnvVars {
+    // Check if .env file exists
+    const envPath = join(__dirname, '..', '.env');
+    if (!existsSync(envPath)) {
+      throw new AgentError(
+        `Missing .env file!\n\n` +
+        `Setup steps:\n` +
+        `1. Copy .env.example to .env: cp .env.example .env\n` +
+        `2. Get your free API key from: https://openrouter.ai/keys\n` +
+        `3. Edit .env and add your OPENROUTER_API_KEY\n` +
+        `4. Run the application again`,
+        'MISSING_ENV_FILE'
+      );
+    }
+
     try {
       return envSchema.parse(process.env);
     } catch (error) {
+      // Parse Zod validation errors for better messages
+      if (error && typeof error === 'object' && 'errors' in error) {
+        const zodError = error as { errors: Array<{ message: string }> };
+        const messages = zodError.errors.map(e => `  - ${e.message}`).join('\n');
+        throw new AgentError(
+          `Configuration validation failed:\n${messages}`,
+          'CONFIG_VALIDATION_ERROR'
+        );
+      }
+
       if (error instanceof Error) {
         throw new AgentError(
           `Configuration error: ${error.message}`,
@@ -410,11 +460,19 @@ let configInstance: Config | null = null;
 
 /**
  * Get the global configuration instance
+ * @param modelName - Optional model name to override default
  * @returns The configuration instance
  */
-export function getConfig(): Config {
+export function getConfig(modelName?: string): Config {
   if (!configInstance) {
-    configInstance = new Config();
+    configInstance = new Config(modelName);
   }
   return configInstance;
+}
+
+/**
+ * Reset the configuration singleton (useful for testing)
+ */
+export function resetConfig(): void {
+  configInstance = null;
 }

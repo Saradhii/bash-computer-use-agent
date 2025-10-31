@@ -158,6 +158,22 @@ export interface AppConfig {
   systemPrompt: string;
 }
 
+/**
+ * Available model configuration
+ */
+export interface ModelConfig {
+  /** Display name for the model */
+  name: string;
+  /** Model ID for API calls */
+  id: string;
+  /** Short description */
+  description: string;
+  /** License type */
+  license: string;
+  /** Whether it's recommended */
+  recommended?: boolean;
+}
+
 // ============================================================================
 // Tool Schema Types
 // ============================================================================
@@ -235,11 +251,19 @@ export interface UserInput {
  * Zod schema for validating environment variables
  */
 export const envSchema = z.object({
-  OPENROUTER_API_KEY: z.string().min(1, "API key is required"),
-  LLM_BASE_URL: z.string().url().default("https://openrouter.ai/api/v1"),
-  LLM_MODEL_NAME: z.string().default("nvidia/nemotron-nano-9b-v2:free"),
-  LLM_TEMPERATURE: z.string().transform(Number).pipe(z.number().min(0).max(2)).default("0.1"),
-  LLM_TOP_P: z.string().transform(Number).pipe(z.number().min(0).max(1)).default("0.95"),
+  OPENROUTER_API_KEY: z.string().min(1, {
+    message: "OPENROUTER_API_KEY is required. Get your free key at: https://openrouter.ai/keys"
+  }),
+  LLM_BASE_URL: z.string().url({
+    message: "LLM_BASE_URL must be a valid URL"
+  }).default("https://openrouter.ai/api/v1"),
+  LLM_MODEL_NAME: z.string().default("meta-llama/llama-3.3-70b-instruct:free"),
+  LLM_TEMPERATURE: z.string().transform(Number).pipe(
+    z.number().min(0, "Temperature must be >= 0").max(2, "Temperature must be <= 2")
+  ).default("0.1"),
+  LLM_TOP_P: z.string().transform(Number).pipe(
+    z.number().min(0, "Top-p must be >= 0").max(1, "Top-p must be <= 1")
+  ).default("0.95"),
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
 });
 

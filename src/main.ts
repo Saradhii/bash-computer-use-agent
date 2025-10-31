@@ -6,7 +6,7 @@
 
 import inquirer from 'inquirer';
 import { program } from 'commander';
-import { Config, getConfig } from './config.js';
+import { Config, getConfig, AVAILABLE_MODELS } from './config.js';
 import { Bash } from './bash.js';
 import { MessageManager } from './messages.js';
 import { LLMClient, type LLMResponse } from './llm.js';
@@ -14,7 +14,8 @@ import type {
   CLIOptions,
   UserInput,
   CommandResult,
-  ToolCall
+  ToolCall,
+  ModelConfig
 } from './types.js';
 import {
   AgentError
@@ -34,13 +35,14 @@ class CLIApplication {
   /**
    * Initialize the CLI application
    * @param options - CLI options from command line arguments
+   * @param modelName - Optional model name to use
    */
-  constructor(options: CLIOptions = {}) {
+  constructor(options: CLIOptions = {}, modelName?: string) {
     this._options = options;
 
     try {
       // Initialize configuration and components
-      this._config = getConfig();
+      this._config = getConfig(modelName);
       this._bash = new Bash(this._config);
       this._llm = new LLMClient(this._config);
       this._messages = new MessageManager(this._config.systemPrompt, 50);
@@ -54,6 +56,34 @@ class CLIApplication {
       }
       throw error;
     }
+  }
+
+  /**
+   * Prompt user to select an LLM model
+   * @returns Selected model ID
+   */
+  static async selectModel(): Promise<string> {
+    console.log('Select an LLM model:\n');
+
+    // Format choices with recommendation indicator
+    const choices = AVAILABLE_MODELS.map(model => ({
+      name: `${model.name}${model.recommended ? ' (Recommended)' : ''}\n  ${model.description}`,
+      value: model.id,
+      short: model.name,
+    }));
+
+    const { modelId } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'modelId',
+        message: 'Choose model:',
+        choices,
+        default: AVAILABLE_MODELS.find(m => m.recommended)?.id || AVAILABLE_MODELS[0]?.id,
+      },
+    ]);
+
+    console.log(''); // Empty line for spacing
+    return modelId;
   }
 
   /**
@@ -409,8 +439,14 @@ async function main(): Promise<void> {
 
   const options = program.opts() as CLIOptions;
 
+  // Select model if not provided via CLI option
+  let selectedModel: string | undefined = options.model;
+  if (!selectedModel) {
+    selectedModel = await CLIApplication.selectModel();
+  }
+
   // Create and start the CLI application
-  const app = new CLIApplication(options);
+  const app = new CLIApplication(options, selectedModel);
 
   // Handle graceful shutdown
   process.on('SIGINT', () => {
