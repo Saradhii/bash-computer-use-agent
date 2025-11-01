@@ -5,7 +5,14 @@
  */
 
 import inquirer from 'inquirer';
+import commandPrompt from 'inquirer-command-prompt';
 import { program } from 'commander';
+import chalk from 'chalk';
+import ora, { type Ora } from 'ora';
+import boxen from 'boxen';
+import gradient from 'gradient-string';
+import { basename } from 'node:path';
+import { homedir } from 'node:os';
 import { Config, getConfig, AVAILABLE_MODELS } from './config.js';
 import { Bash } from './bash.js';
 import { MessageManager } from './messages.js';
@@ -47,6 +54,9 @@ class CLIApplication {
       this._llm = new LLMClient(this._config);
       this._messages = new MessageManager(this._config.systemPrompt, 50);
 
+      // Register command prompt for history support
+      inquirer.registerPrompt('command', commandPrompt);
+
       // Override config with command line options
       this._applyCLIOptions();
     } catch (error) {
@@ -63,11 +73,13 @@ class CLIApplication {
    * @returns Selected model ID
    */
   static async selectModel(): Promise<string> {
-    console.log('Select an LLM model:\n');
+    console.log(chalk.cyan.bold('\n🤖 Select an LLM model:\n'));
 
-    // Format choices with recommendation indicator
+    // Format choices with recommendation indicator and colors
     const choices = AVAILABLE_MODELS.map(model => ({
-      name: `${model.name}${model.recommended ? ' (Recommended)' : ''}\n  ${model.description}`,
+      name: model.recommended
+        ? `${chalk.green('★')} ${chalk.bold(model.name)} ${chalk.yellow('(Recommended)')}\n  ${chalk.gray(model.description)}`
+        : `  ${chalk.bold(model.name)}\n  ${chalk.gray(model.description)}`,
       value: model.id,
       short: model.name,
     }));
@@ -76,7 +88,7 @@ class CLIApplication {
       {
         type: 'list',
         name: 'modelId',
-        message: 'Choose model:',
+        message: chalk.cyan('Choose model:'),
         choices,
         default: AVAILABLE_MODELS.find(m => m.recommended)?.id || AVAILABLE_MODELS[0]?.id,
       },
@@ -128,10 +140,20 @@ class CLIApplication {
    * @private
    */
   private _printWelcome(): void {
-    console.log('-'.repeat(80));
-    console.log('BASH COMPUTER USE AGENT');
-    console.log('-'.repeat(80));
-    console.log(`[INFO] Type 'quit' to exit`);
+    const title = gradient.pastel.multiline([
+      '  🤖 BASH COMPUTER USE AGENT  ',
+    ].join('\n'));
+
+    console.log(boxen(title, {
+      padding: 1,
+      margin: { top: 1, bottom: 1 },
+      borderStyle: 'round',
+      borderColor: 'cyan',
+      align: 'center'
+    }));
+
+    console.log(chalk.gray(`Type 'quit' to exit | 'clear' to clear screen | 'cwd' for current directory`));
+    console.log();
   }
 
   /**
@@ -157,16 +179,37 @@ class CLIApplication {
   }
 
   /**
+   * Format the current working directory path for display
+   * Shortens the path by replacing home directory with ~ and showing clean formatting
+   * @param cwd - Current working directory path
+   * @returns Formatted path string with styling
+   * @private
+   */
+  private _formatPath(cwd: string): string {
+    const home = homedir();
+
+    // Replace home directory with ~
+    if (cwd.startsWith(home)) {
+      return chalk.cyan(`~${cwd.slice(home.length)}`);
+    }
+
+    // For non-home paths, just style them
+    return chalk.cyan(cwd);
+  }
+
+  /**
    * Handle user input from the command line
    * @private
    */
   private async _handleUserInput(): Promise<void> {
-    // Get user input - NVIDIA style prompt
+    // Get user input - Modern styled prompt with history support
+    const formattedPath = this._formatPath(this._bash.cwd);
     const { input } = await inquirer.prompt([
       {
-        type: 'input',
+        type: 'command',
         name: 'input',
-        message: `[${this._bash.cwd}] 🙂] `,
+        message: `${chalk.cyanBright('❯')} ${formattedPath} ${chalk.gray('›')} `,
+        context: 0,
         validate: (input: string) => {
           if (!input.trim()) {
             return 'Please enter a command or question';
@@ -213,7 +256,7 @@ class CLIApplication {
         return true;
 
       case 'cwd':
-        console.log(`Current directory: ${this._bash.cwd}`);
+        console.log(chalk.cyan(`\n📁 Current directory: ${chalk.bold(this._bash.cwd)}\n`));
         return true;
 
       default:
@@ -228,8 +271,11 @@ class CLIApplication {
   private async _processRequest(): Promise<void> {
     // Continue processing until no more tool calls
     while (true) {
-      // Show thinking indicator (NVIDIA style - simple text)
-      console.log('Thinking...');
+      // Show thinking indicator with ora spinner
+      const spinner = ora({
+        text: chalk.cyan('Thinking...'),
+        spinner: 'dots',
+      }).start();
 
       try {
         // Query the LLM
@@ -238,11 +284,14 @@ class CLIApplication {
           [this._bash.getToolSchema()]
         );
 
+        // Stop spinner successfully
+        spinner.succeed(chalk.green('Response ready'));
+
         // Handle assistant's text response
         if (response.message) {
           const content = this._filterThinkDirective(response.message);
           if (content) {
-            console.log(`\n${content}`);
+            console.log(chalk.white(`\n${content}`));
             this._messages.addAssistantMessage(content);
           }
         }
@@ -258,6 +307,7 @@ class CLIApplication {
         break;
 
       } catch (error) {
+        spinner.fail(chalk.red('Error occurred'));
         throw error;
       }
     }
@@ -284,40 +334,52 @@ class CLIApplication {
       const command = args.cmd;
 
       if (!command) {
-        console.log('No command provided');
+        console.log(chalk.red('✗ No command provided'));
         this._messages.addToolMessage('No command provided', toolCall.id);
         continue;
       }
 
-      // Ask for confirmation - NVIDIA style
-      console.log(`\n▶️ Execute '${command}'? [y/N]:`);
+      // Check if auto-execute is enabled
+      let shouldExecute = false;
 
-      // Get user confirmation (simple input, not inquirer confirm)
-      const { confirm } = await inquirer.prompt([
-        {
-          type: 'input',
-          name: 'confirm',
-          message: '',
-          validate: (input: string) => {
-            const answer = input.trim().toLowerCase();
-            if (answer === 'y' || answer === 'n' || answer === '') {
-              return true;
-            }
-            return 'Please enter y or n';
+      if (this._options.auto) {
+        console.log(chalk.gray(`\n▶ Auto-executing: ${chalk.cyan(command)}`));
+        shouldExecute = true;
+      } else {
+        // Ask for confirmation
+        console.log(chalk.yellow(`\n▶ Execute '${chalk.cyan(command)}'? [y/N]:`));
+
+        // Get user confirmation (simple input, not inquirer confirm)
+        const { confirm } = await inquirer.prompt([
+          {
+            type: 'input',
+            name: 'confirm',
+            message: '',
+            validate: (input: string) => {
+              const answer = input.trim().toLowerCase();
+              if (answer === 'y' || answer === 'n' || answer === '') {
+                return true;
+              }
+              return 'Please enter y or n';
+            },
           },
-        },
-      ]);
+        ]);
 
-      const shouldExecute = confirm.trim().toLowerCase() === 'y';
+        shouldExecute = confirm.trim().toLowerCase() === 'y';
+      }
 
       if (shouldExecute) {
         // Execute the command
-        console.log('Executing...');
+        const execSpinner = ora({
+          text: chalk.cyan('Executing command...'),
+          spinner: 'dots',
+        }).start();
 
         try {
           const result = await this._bash.execBashCommand(command);
+          execSpinner.stop();
 
-          // Display results - NVIDIA style (raw output)
+          // Display results with modern UI
           this._displayCommandResult(result);
 
           // Add result to messages
@@ -333,7 +395,16 @@ class CLIApplication {
             toolCall.id
           );
         } catch (error) {
-          console.log(`Error: ${error}`);
+          execSpinner.fail(chalk.red('Execution failed'));
+
+          const errorBox = boxen(chalk.red(`${error}`), {
+            padding: 1,
+            borderStyle: 'round',
+            borderColor: 'red',
+            title: chalk.red.bold('Execution Error'),
+          });
+          console.log('\n' + errorBox);
+
           this._messages.addToolMessage(
             `Error: ${error}`,
             toolCall.id
@@ -341,7 +412,7 @@ class CLIApplication {
         }
       } else {
         // Command cancelled by user
-        console.log('Command execution cancelled');
+        console.log(chalk.yellow('\n⊘ Command execution cancelled'));
         this._messages.addToolMessage(
           'Command cancelled by user',
           toolCall.id
@@ -357,19 +428,54 @@ class CLIApplication {
    */
   private _displayCommandResult(result: CommandResult): void {
     if (result.error) {
-      console.log(`Error: ${result.error}`);
+      // Display error in a red box
+      const errorBox = boxen(chalk.red(`✗ Error: ${result.error}`), {
+        padding: 1,
+        borderStyle: 'round',
+        borderColor: 'red',
+        title: chalk.red.bold('Error'),
+        titleAlignment: 'left',
+      });
+      console.log('\n' + errorBox);
       return;
     }
 
-    // Display stdout (NVIDIA style - raw output)
-    if (result.stdout) {
-      console.log(result.stdout);
+    // Check if command has any output
+    const hasStdout = result.stdout && result.stdout.trim().length > 0;
+    const hasStderr = result.stderr && result.stderr.trim().length > 0;
+    const hasOutput = hasStdout || hasStderr;
+
+    // Build output content
+    let outputContent = '';
+
+    if (hasStdout) {
+      outputContent += chalk.white(result.stdout);
     }
 
-    // Display stderr (NVIDIA style - raw output)
-    if (result.stderr) {
-      console.error(result.stderr);
+    if (hasStderr) {
+      if (outputContent) outputContent += '\n';
+      outputContent += chalk.yellow(result.stderr);
     }
+
+    // If no output, show success message
+    if (!hasOutput) {
+      outputContent = chalk.gray('✓ Command executed successfully (no output)');
+    }
+
+    // Display output in a box
+    const statusColor = result.exitCode === 0 ? 'green' : 'yellow';
+    const statusIcon = result.exitCode === 0 ? '✓' : '⚠';
+    const statusText = result.exitCode === 0 ? 'Success' : `Exit code: ${result.exitCode}`;
+
+    const resultBox = boxen(outputContent, {
+      padding: 1,
+      borderStyle: 'round',
+      borderColor: statusColor,
+      title: chalk[statusColor].bold(`${statusIcon} ${statusText}`),
+      titleAlignment: 'left',
+    });
+
+    console.log('\n' + resultBox);
   }
 
   /**
@@ -396,7 +502,8 @@ class CLIApplication {
     } else if (error instanceof Error) {
       this._printError(`Unexpected error: ${error.message}`);
       if (this._options.verbose) {
-        console.error(error.stack);
+        console.error(chalk.gray('\nStack trace:'));
+        console.error(chalk.gray(error.stack));
       }
     } else {
       this._printError(`Unknown error: ${error}`);
@@ -409,7 +516,14 @@ class CLIApplication {
    * @private
    */
   private _printError(message: string): void {
-    console.log(`Error: ${message}`);
+    const errorBox = boxen(chalk.red(message), {
+      padding: 1,
+      borderStyle: 'round',
+      borderColor: 'red',
+      title: chalk.red.bold('✗ Error'),
+      titleAlignment: 'left',
+    });
+    console.log('\n' + errorBox + '\n');
   }
 
   /**
@@ -417,7 +531,7 @@ class CLIApplication {
    * @private
    */
   private _printGoodbye(): void {
-    console.log('Shutting down. Bye!');
+    console.log(chalk.cyan('\n👋 Shutting down. Bye!\n'));
   }
 }
 
@@ -435,6 +549,7 @@ async function main(): Promise<void> {
     .option('-k, --api-key <key>', 'Override API key')
     .option('-m, --model <model>', 'Override LLM model')
     .option('-n, --non-interactive', 'Run without command confirmation')
+    .option('-a, --auto', 'Auto-execute commands without confirmation')
     .parse();
 
   const options = program.opts() as CLIOptions;

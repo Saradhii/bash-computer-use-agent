@@ -22,11 +22,18 @@ npm run build
 # Start (prompts for model selection)
 npm start
 
-# Or use directly
-npm run dev
+# Auto-execute mode (no confirmation prompts)
+npm run start:auto
 
-# With specific model
+# Development mode
+npm run dev
+npm run dev:auto
+
+# Advanced: with specific model
 npm start -- -m meta-llama/llama-3.3-70b-instruct:free
+
+# Advanced: combine flags
+npm start -- -m meta-llama/llama-3.3-70b-instruct:free -a
 ```
 
 ### Available Models
@@ -80,7 +87,11 @@ npm run clean        # Remove build artifacts
 - `LLM_TEMPERATURE` - Default: `0.1`
 - `LLM_TOP_P` - Default: `0.95`
 
-CLI options: `-v` (verbose), `-m <model>` (override model), `-n` (non-interactive)
+CLI options:
+- `-v, --verbose` - Enable verbose output
+- `-m, --model <model>` - Override LLM model
+- `-a, --auto` - Auto-execute commands without confirmation
+- `-n, --non-interactive` - Run without command confirmation
 
 ## Requirements
 

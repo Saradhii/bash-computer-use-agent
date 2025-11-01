@@ -229,6 +229,8 @@ export interface CLIOptions {
   apiKey?: string;
   /** Custom model */
   model?: string;
+  /** Auto-execute commands without confirmation */
+  auto?: boolean;
 }
 
 /**
