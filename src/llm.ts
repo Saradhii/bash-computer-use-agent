@@ -1,8 +1,3 @@
-/**
- * LLM integration for the Computer Use Agent
- * Handles communication with OpenAI-compatible APIs for function calling
- */
-
 import { OpenAI } from 'openai';
 import type { Config } from './config.js';
 import type {
@@ -17,21 +12,18 @@ import {
 } from './types.js';
 import { MessageManager } from './messages.js';
 
-/**
- * LLM response wrapper containing assistant message and tool calls
- */
 export interface LLMResponse {
-  /** Text response from the assistant */
+  
   message: string;
-  /** Tool calls requested by the assistant */
+  
   toolCalls: ToolCall[];
-  /** Token usage information */
+  
   usage: {
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
   } | null;
-  /** Response metadata */
+  
   metadata: {
     model: string;
     finishReason: string | null;
@@ -39,20 +31,12 @@ export interface LLMResponse {
   };
 }
 
-/**
- * LLM client wrapper with error handling and retry logic
- * Provides a simplified interface for querying the LLM with tools
- */
 export class LLMClient {
   private readonly _client: OpenAI;
   private readonly _config: Config;
   private readonly _maxRetries: number = 3;
   private readonly _retryDelay: number = 1000; // 1 second
 
-  /**
-   * Initialize the LLM client
-   * @param config - Application configuration
-   */
   constructor(config: Config) {
     this._config = config;
 
@@ -73,14 +57,6 @@ export class LLMClient {
     console.info(`[LLM] API endpoint: ${config.llm.baseUrl}`);
   }
 
-  /**
-   * Query the LLM with messages and available tools
-   * @param messages - Message manager containing conversation history
-   * @param tools - Available tool schemas
-   * @param maxTokens - Maximum tokens for the response (optional)
-   * @returns Promise resolving to LLM response
-   * @throws {LLMError} If the query fails after retries
-   */
   async query(
     messages: MessageManager,
     tools: ToolSchema[],
@@ -137,14 +113,6 @@ export class LLMClient {
     );
   }
 
-  /**
-   * Execute a single query to the LLM
-   * @param messages - Array of messages
-   * @param tools - Available tool schemas
-   * @param maxTokens - Maximum tokens for response
-   * @returns Promise resolving to LLM response
-   * @private
-   */
   private async _executeQuery(
     messages: Message[],
     tools: ToolSchema[],
@@ -275,12 +243,6 @@ export class LLMClient {
     }
   }
 
-  /**
-   * Check if an error is retryable
-   * @param error - Error to check
-   * @returns True if error should be retried
-   * @private
-   */
   private _isRetryableError(error: unknown): boolean {
     if (error instanceof Error) {
       // Network errors
@@ -306,12 +268,6 @@ export class LLMClient {
     return false;
   }
 
-  /**
-   * Extract HTTP status code from error
-   * @param error - Error to extract status from
-   * @returns Status code or null if not available
-   * @private
-   */
   private _extractStatusCode(error: unknown): number | null {
     if (error && typeof error === 'object') {
       // OpenAI errors
@@ -332,20 +288,10 @@ export class LLMClient {
     return null;
   }
 
-  /**
-   * Delay execution for specified milliseconds
-   * @param ms - Milliseconds to delay
-   * @returns Promise that resolves after delay
-   * @private
-   */
   private _delay(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  /**
-   * Test the LLM connection with a simple query
-   * @returns Promise resolving to true if connection is successful
-   */
   async testConnection(): Promise<boolean> {
     try {
       const response = await this._client.chat.completions.create({
@@ -367,10 +313,6 @@ export class LLMClient {
     }
   }
 
-  /**
-   * Get model information
-   * @returns Object with model details
-   */
   getModelInfo(): {
     name: string;
     endpoint: string;
@@ -385,22 +327,12 @@ export class LLMClient {
     };
   }
 
-  /**
-   * Estimate token count for a message (rough approximation)
-   * @param text - Text to estimate tokens for
-   * @returns Estimated token count
-   */
   estimateTokens(text: string): number {
     // Rough approximation: ~4 characters per token
     // This is not exact but good enough for estimates
     return Math.ceil(text.length / 4);
   }
 
-  /**
-   * Estimate total tokens in conversation
-   * @param messages - Array of messages
-   * @returns Estimated total token count
-   */
   estimateConversationTokens(messages: Message[]): number {
     let totalTokens = 0;
 

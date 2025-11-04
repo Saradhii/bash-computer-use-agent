@@ -1,9 +1,3 @@
-/**
- * Bash command executor with safety features
- * Handles command validation, execution, and working directory tracking
- * Based on NVIDIA's official implementation
- */
-
 import { execa, type ExecaError } from 'execa';
 import { join, resolve, isAbsolute, basename } from 'node:path';
 import { homedir } from 'node:os';
@@ -18,10 +12,6 @@ import {
   CommandValidationError
 } from './types.js';
 
-/**
- * Command injection patterns to block
- * Prevents command injection attacks
- */
 const INJECTION_PATTERNS = [
   /\$[^a-zA-Z_]/, // $ followed by non-alphabetic character
   /`[^`]*`/, // Backticks for command substitution
@@ -37,19 +27,11 @@ const INJECTION_PATTERNS = [
   />[^>]/, // Output redirection (except >>)
 ] as const;
 
-/**
- * Bash executor class that provides safe command execution
- * with working directory tracking and comprehensive error handling
- */
 export class Bash {
   private _cwd: string;
   private readonly _config: Config;
   private readonly _env: NodeJS.ProcessEnv;
 
-  /**
-   * Initialize the Bash executor
-   * @param config - Application configuration
-   */
   constructor(config: Config) {
     this._config = config;
     this._cwd = config.rootDir;
@@ -59,17 +41,10 @@ export class Bash {
     void this.initializeWorkingDirectory();
   }
 
-  /**
-   * Get the current working directory
-   */
   get cwd(): string {
     return this._cwd;
   }
 
-  /**
-   * Initialize the working directory
-   * @private
-   */
   private async initializeWorkingDirectory(): Promise<void> {
     try {
       // Validate and set the initial working directory
@@ -82,12 +57,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Split command string into parts for validation
-   * @param command - Command string to split
-   * @returns Array of command parts
-   * @private
-   */
   private _splitCommands(command: string): string[] {
     // Split by spaces, but preserve quoted strings
     const parts: string[] = [];
@@ -122,12 +91,6 @@ export class Bash {
     return parts;
   }
 
-  /**
-   * Check for command injection patterns
-   * @param command - Command to check
-   * @throws {CommandValidationError} If injection patterns are found
-   * @private
-   */
   private _checkForInjection(command: string): void {
     for (const pattern of INJECTION_PATTERNS) {
       if (pattern.test(command)) {
@@ -139,13 +102,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Execute a bash command with safety checks
-   * @param command - Command to execute
-   * @returns Promise resolving to command result
-   * @throws {CommandValidationError} If command fails validation
-   * @throws {CommandExecutionError} If command execution fails
-   */
   async execBashCommand(command: string): Promise<CommandResult> {
     // Check for injection patterns first
     this._checkForInjection(command);
@@ -162,12 +118,6 @@ export class Bash {
     return this.executeCommandWithWrapper(command);
   }
 
-  /**
-   * Handle cd command specially to track working directory
-   * @param command - The cd command
-   * @returns Command result with updated working directory
-   * @private
-   */
   private async handleCdCommand(command: string): Promise<CommandResult> {
     try {
       // Extract directory path from command
@@ -207,23 +157,11 @@ export class Bash {
     }
   }
 
-  /**
-   * Extract directory path from cd command
-   * @param command - cd command string
-   * @returns Directory path
-   * @private
-   */
   private extractDirectoryPath(command: string): string {
     // Remove 'cd ' prefix and strip whitespace
     return command.trim().substring(3).trim().replace(/^["']|["']$/g, '');
   }
 
-  /**
-   * Resolve a path relative to current working directory
-   * @param path - Path to resolve
-   * @returns Absolute path
-   * @private
-   */
   private resolvePath(path: string): string {
     // Handle special cases
     if (path === '~' || path === '~/') {
@@ -243,13 +181,6 @@ export class Bash {
     return resolve(this._cwd, path);
   }
 
-  /**
-   * Execute a command using NVIDIA's wrapping pattern
-   * Wraps command with echo __END__; pwd to separate output and directory
-   * @param command - Command to execute
-   * @returns Command result
-   * @private
-   */
   private async executeCommandWithWrapper(command: string): Promise<CommandResult> {
     const startTime = Date.now();
 
@@ -326,12 +257,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Execute a command using execa for better error handling
-   * @param command - Command to execute
-   * @returns Command result
-   * @private
-   */
   private async executeCommand(command: string): Promise<CommandResult> {
     const startTime = Date.now();
 
@@ -418,18 +343,10 @@ export class Bash {
     }
   }
 
-  /**
-   * Get the JSON schema for the exec_bash_command tool
-   * @returns Tool schema for LLM function calling
-   */
   getToolSchema(): ToolSchema {
     return this._config.bashToolSchema;
   }
 
-  /**
-   * Get execution context information
-   * @returns Current execution context
-   */
   getExecutionContext(): ExecutionContext {
     const uid = process.getuid?.();
     const gid = process.getgid?.();
@@ -442,11 +359,6 @@ export class Bash {
     };
   }
 
-  /**
-   * Check if a file exists in the current working directory
-   * @param filename - File to check
-   * @returns True if file exists
-   */
   async fileExists(filename: string): Promise<boolean> {
     try {
       const result = await this.executeCommand(`test -f "${filename}" && echo "EXISTS"`);
@@ -456,11 +368,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Check if a directory exists in the current working directory
-   * @param dirname - Directory to check
-   * @returns True if directory exists
-   */
   async directoryExists(dirname: string): Promise<boolean> {
     try {
       const result = await this.executeCommand(`test -d "${dirname}" && echo "EXISTS"`);
@@ -470,11 +377,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Get the size of a file
-   * @param filename - File to check
-   * @returns File size in bytes, or null if file doesn't exist
-   */
   async getFileSize(filename: string): Promise<number | null> {
     try {
       const result = await this.executeCommand(`wc -c < "${filename}"`);
@@ -485,11 +387,6 @@ export class Bash {
     }
   }
 
-  /**
-   * List files in current directory with optional pattern
-   * @param pattern - Glob pattern to match (optional)
-   * @returns Array of file names
-   */
   async listFiles(pattern?: string): Promise<string[]> {
     try {
       const command = pattern ? `ls -1 ${pattern} 2>/dev/null` : 'ls -1';
@@ -505,10 +402,6 @@ export class Bash {
     }
   }
 
-  /**
-   * Get current user information
-   * @returns User information object
-   */
   async getUserInfo(): Promise<{ user: string; home: string; shell: string }> {
     try {
       const userResult = await this.executeCommand('whoami');

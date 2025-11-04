@@ -1,8 +1,3 @@
-/**
- * Configuration management for the Computer Use Agent
- * Handles environment variables, default values, and validation
- */
-
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
@@ -21,18 +16,11 @@ import {
   envSchema
 } from './types.js';
 
-// Load environment variables from .env file
 config();
 
-/**
- * Get the current file's directory (ES module equivalent of __dirname)
- */
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-/**
- * Available LLM models for the agent
- */
 export const AVAILABLE_MODELS: readonly ModelConfig[] = Object.freeze([
   {
     name: 'Llama 3.3 70B Instruct',
@@ -50,10 +38,6 @@ export const AVAILABLE_MODELS: readonly ModelConfig[] = Object.freeze([
   },
 ] as const);
 
-/**
- * Default allowed commands for the bash agent
- * These commands are safe to execute and commonly needed for file operations
- */
 const DEFAULT_ALLOWED_COMMANDS = Object.freeze([
   // File operations
   'cd', 'cp', 'ls', 'cat', 'find', 'touch', 'echo', 'grep', 'pwd', 'mkdir',
@@ -96,10 +80,6 @@ const DEFAULT_ALLOWED_COMMANDS = Object.freeze([
   'iostat', 'vmstat', 'sar', 'sysctl',
 ] as const);
 
-/**
- * Default security configuration
- * Enhanced based on NVIDIA's implementation
- */
 const DEFAULT_SECURITY_CONFIG: SecurityConfig = Object.freeze({
   allowedCommands: DEFAULT_ALLOWED_COMMANDS,
   blockedPatterns: Object.freeze([
@@ -211,18 +191,11 @@ const DEFAULT_SECURITY_CONFIG: SecurityConfig = Object.freeze({
   commandTimeout: 30000, // 30 seconds
 });
 
-/**
- * Configuration class that manages all application settings
- */
 export class Config {
   private readonly _llm: LLMConfig;
   private readonly _security: SecurityConfig;
   private readonly _rootDir: string;
 
-  /**
-   * Initialize configuration
-   * @param modelName - Optional model name to override default
-   */
   constructor(modelName?: string) {
     // Validate environment variables
     const env = this.validateEnv();
@@ -247,10 +220,6 @@ export class Config {
     this.validateConfig();
   }
 
-  /**
-   * Validate and parse environment variables
-   * @throws {AgentError} If required environment variables are missing
-   */
   private validateEnv(): EnvVars {
     // Check if .env file exists
     const envPath = join(__dirname, '..', '.env');
@@ -289,10 +258,6 @@ export class Config {
     }
   }
 
-  /**
-   * Validate critical configuration values
-   * @throws {AgentError} If configuration is invalid
-   */
   private validateConfig(): void {
     // Check if API key is properly configured
     if (this._llm.apiKey === 'YOUR_API_KEY_HERE' || !this._llm.apiKey) {
@@ -319,30 +284,18 @@ export class Config {
     }
   }
 
-  /**
-   * Get the LLM configuration
-   */
   get llm(): LLMConfig {
     return this._llm;
   }
 
-  /**
-   * Get the security configuration
-   */
   get security(): SecurityConfig {
     return this._security;
   }
 
-  /**
-   * Get the root directory
-   */
   get rootDir(): string {
     return this._rootDir;
   }
 
-  /**
-   * Get the system prompt template
-   */
   get systemPrompt(): string {
     return `/think
 
@@ -375,31 +328,16 @@ like \`rm\`, \`mv\`, \`rmdir\`, \`sudo\`, \`chmod\`, \`chown\`, etc. If the user
 Be helpful but always stay within the allowed command list!`;
   }
 
-  /**
-   * Check if a command is in the allowlist
-   * @param command - Command to check
-   * @returns True if command is allowed
-   */
   isCommandAllowed(command: string): boolean {
     // Get the base command (first word)
     const baseCommand = command.trim().split(/\s+/)[0];
     return this._security.allowedCommands.some(allowed => allowed === baseCommand);
   }
 
-  /**
-   * Check if a command contains blocked patterns
-   * @param command - Command to check
-   * @returns True if command contains blocked patterns
-   */
   hasBlockedPatterns(command: string): boolean {
     return this._security.blockedPatterns.some(pattern => pattern.test(command));
   }
 
-  /**
-   * Validate a command for execution
-   * @param command - Command to validate
-   * @throws {CommandValidationError} If command is not allowed
-   */
   validateCommand(command: string): void {
     if (!command.trim()) {
       throw new CommandValidationError('Command cannot be empty', command);
@@ -429,9 +367,6 @@ Be helpful but always stay within the allowed command list!`;
     }
   }
 
-  /**
-   * Get a tool schema for the exec_bash_command function
-   */
   get bashToolSchema(): ToolSchema {
     return {
       type: 'function',
@@ -453,16 +388,8 @@ Be helpful but always stay within the allowed command list!`;
   }
 }
 
-/**
- * Create a singleton configuration instance
- */
 let configInstance: Config | null = null;
 
-/**
- * Get the global configuration instance
- * @param modelName - Optional model name to override default
- * @returns The configuration instance
- */
 export function getConfig(modelName?: string): Config {
   if (!configInstance) {
     configInstance = new Config(modelName);
@@ -470,9 +397,6 @@ export function getConfig(modelName?: string): Config {
   return configInstance;
 }
 
-/**
- * Reset the configuration singleton (useful for testing)
- */
 export function resetConfig(): void {
   configInstance = null;
 }

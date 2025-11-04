@@ -1,9 +1,3 @@
-/**
- * Main CLI interface for the Computer Use Agent
- * Provides an interactive command-line interface for executing bash commands through natural language
- * Based on NVIDIA's official implementation with minimal UI
- */
-
 import inquirer from 'inquirer';
 import commandPrompt from 'inquirer-command-prompt';
 import { program } from 'commander';
@@ -28,9 +22,6 @@ import {
   AgentError
 } from './types.js';
 
-/**
- * CLI application class that manages the interactive session
- */
 class CLIApplication {
   private readonly _config: Config;
   private readonly _bash: Bash;
@@ -39,11 +30,6 @@ class CLIApplication {
   private readonly _options: CLIOptions;
   private _isRunning: boolean = true;
 
-  /**
-   * Initialize the CLI application
-   * @param options - CLI options from command line arguments
-   * @param modelName - Optional model name to use
-   */
   constructor(options: CLIOptions = {}, modelName?: string) {
     this._options = options;
 
@@ -68,10 +54,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Prompt user to select an LLM model
-   * @returns Selected model ID
-   */
   static async selectModel(): Promise<string> {
     console.log(chalk.cyan.bold('\n🤖 Select an LLM model:\n'));
 
@@ -98,10 +80,6 @@ class CLIApplication {
     return modelId;
   }
 
-  /**
-   * Apply command line options to configuration
-   * @private
-   */
   private _applyCLIOptions(): void {
     // Note: Config properties are readonly by design
     // CLI options override will need to be handled differently
@@ -112,9 +90,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Start the interactive CLI session
-   */
   async start(): Promise<void> {
     this._printWelcome();
 
@@ -135,10 +110,6 @@ class CLIApplication {
     this._printGoodbye();
   }
 
-  /**
-   * Print welcome message and help information
-   * @private
-   */
   private _printWelcome(): void {
     const title = gradient.pastel.multiline([
       '  🤖 BASH COMPUTER USE AGENT  ',
@@ -156,10 +127,6 @@ class CLIApplication {
     console.log();
   }
 
-  /**
-   * Test LLM connection and report status
-   * @private
-   */
   private async _testLLMConnection(): Promise<void> {
     console.log('Testing LLM connection...');
 
@@ -178,13 +145,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Format the current working directory path for display
-   * Shortens the path by replacing home directory with ~ and showing clean formatting
-   * @param cwd - Current working directory path
-   * @returns Formatted path string with styling
-   * @private
-   */
   private _formatPath(cwd: string): string {
     const home = homedir();
 
@@ -197,10 +157,6 @@ class CLIApplication {
     return chalk.cyan(cwd);
   }
 
-  /**
-   * Handle user input from the command line
-   * @private
-   */
   private async _handleUserInput(): Promise<void> {
     // Get user input - Modern styled prompt with history support
     const formattedPath = this._formatPath(this._bash.cwd);
@@ -236,12 +192,6 @@ class CLIApplication {
     await this._processRequest();
   }
 
-  /**
-   * Handle special CLI commands
-   * @param input - User input (lowercase)
-   * @returns True if a special command was handled
-   * @private
-   */
   private _handleSpecialCommands(input: string): boolean {
     switch (input) {
       case 'quit':
@@ -264,10 +214,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Process user request with the LLM
-   * @private
-   */
   private async _processRequest(): Promise<void> {
     // Continue processing until no more tool calls
     while (true) {
@@ -313,11 +259,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Handle tool calls from the LLM
-   * @param toolCalls - Array of tool calls to execute
-   * @private
-   */
   private async _handleToolCalls(toolCalls: ToolCall[]): Promise<void> {
     for (const toolCall of toolCalls) {
       if (toolCall.function.name !== 'exec_bash_command') {
@@ -421,11 +362,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Display command execution result
-   * @param result - Command execution result
-   * @private
-   */
   private _displayCommandResult(result: CommandResult): void {
     if (result.error) {
       // Display error in a red box
@@ -478,12 +414,6 @@ class CLIApplication {
     console.log('\n' + resultBox);
   }
 
-  /**
-   * Filter out the /think directive from assistant responses
-   * @param content - Raw content from assistant
-   * @returns Filtered content
-   * @private
-   */
   private _filterThinkDirective(content: string): string {
     if (content.startsWith('/think')) {
       return content.substring(5).trim();
@@ -491,11 +421,6 @@ class CLIApplication {
     return content.trim();
   }
 
-  /**
-   * Handle errors gracefully
-   * @param error - Error to handle
-   * @private
-   */
   private _handleError(error: unknown): void {
     if (error instanceof AgentError) {
       this._printError(error.message);
@@ -510,11 +435,6 @@ class CLIApplication {
     }
   }
 
-  /**
-   * Print error message
-   * @param message - Error message to print
-   * @private
-   */
   private _printError(message: string): void {
     const errorBox = boxen(chalk.red(message), {
       padding: 1,
@@ -526,18 +446,11 @@ class CLIApplication {
     console.log('\n' + errorBox + '\n');
   }
 
-  /**
-   * Print goodbye message
-   * @private
-   */
   private _printGoodbye(): void {
     console.log(chalk.cyan('\n👋 Shutting down. Bye!\n'));
   }
 }
 
-/**
- * Main entry point
- */
 async function main(): Promise<void> {
   // Setup command line program
   program
@@ -578,7 +491,6 @@ async function main(): Promise<void> {
   await app.start();
 }
 
-// Run the application if this file is executed directly
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(error => {
     console.error('Fatal error:', error);

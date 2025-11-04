@@ -1,37 +1,16 @@
-/**
- * Utility functions for the Computer Use Agent
- * Provides helper functions for common operations
- */
-
 import { basename, extname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/**
- * Extract the base command from a command string
- * @param command - Command string to parse
- * @returns Base command without arguments
- */
 export function extractBaseCommand(command: string): string {
   const trimmed = command.trim();
   const firstSpace = trimmed.indexOf(' ');
   return firstSpace > 0 ? trimmed.substring(0, firstSpace) : trimmed;
 }
 
-/**
- * Check if a string is empty or only whitespace
- * @param str - String to check
- * @returns True if string is empty or whitespace
- */
 export function isEmpty(str: string | null | undefined): boolean {
   return !str || str.trim().length === 0;
 }
 
-/**
- * Truncate a string to a maximum length with ellipsis
- * @param str - String to truncate
- * @param maxLength - Maximum length
- * @returns Truncated string
- */
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) {
     return str;
@@ -39,12 +18,6 @@ export function truncate(str: string, maxLength: number): string {
   return str.substring(0, maxLength - 3) + '...';
 }
 
-/**
- * Format bytes into human-readable format
- * @param bytes - Number of bytes
- * @param decimals - Number of decimal places (default: 2)
- * @returns Formatted string
- */
 export function formatBytes(bytes: number, decimals: number = 2): string {
   if (bytes === 0) return '0 Bytes';
 
@@ -57,11 +30,6 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-/**
- * Parse command arguments safely
- * @param command - Command string to parse
- * @returns Array of arguments
- */
 export function parseCommandArgs(command: string): string[] {
   const args: string[] = [];
   let current = '';
@@ -99,52 +67,24 @@ export function parseCommandArgs(command: string): string[] {
   return args;
 }
 
-/**
- * Get the file extension from a path
- * @param path - File path
- * @returns File extension (without dot)
- */
 export function getFileExtension(path: string): string {
   return extname(path).substring(1);
 }
 
-/**
- * Get the relative path from base to target
- * @param from - Base path
- * @param to - Target path
- * @returns Relative path
- */
 export function getRelativePath(from: string, to: string): string {
   return relative(from, to);
 }
 
-/**
- * Sanitize a string for safe display
- * @param str - String to sanitize
- * @returns Sanitized string
- */
 export function sanitizeString(str: string): string {
   return str
     .replace(/[\x00-\x1F\x7F]/g, '') // Remove control characters
     .trim();
 }
 
-/**
- * Create a delay promise
- * @param ms - Milliseconds to delay
- * @returns Promise that resolves after delay
- */
 export function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-/**
- * Retry a function with exponential backoff
- * @param fn - Function to retry
- * @param maxRetries - Maximum number of retries
- * @param baseDelay - Base delay in milliseconds
- * @returns Promise with function result
- */
 export async function retry<T>(
   fn: () => Promise<T>,
   maxRetries: number = 3,
@@ -167,11 +107,6 @@ export async function retry<T>(
   throw lastError!;
 }
 
-/**
- * Generate a random ID
- * @param length - Length of ID (default: 8)
- * @returns Random ID string
- */
 export function generateId(length: number = 8): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
   let result = '';
@@ -181,11 +116,6 @@ export function generateId(length: number = 8): string {
   return result;
 }
 
-/**
- * Format a duration in milliseconds to human-readable format
- * @param ms - Duration in milliseconds
- * @returns Formatted duration string
- */
 export function formatDuration(ms: number): string {
   if (ms < 1000) {
     return `${ms}ms`;
@@ -198,20 +128,10 @@ export function formatDuration(ms: number): string {
   }
 }
 
-/**
- * Check if a value is a promise
- * @param value - Value to check
- * @returns True if value is a promise
- */
 export function isPromise(value: unknown): value is Promise<unknown> {
   return value !== null && typeof value === 'object' && 'then' in value && typeof value.then === 'function';
 }
 
-/**
- * Deep clone an object
- * @param obj - Object to clone
- * @returns Cloned object
- */
 export function deepClone<T>(obj: T): T {
   if (obj === null || typeof obj !== 'object') {
     return obj;
@@ -238,12 +158,6 @@ export function deepClone<T>(obj: T): T {
   return obj;
 }
 
-/**
- * Memoize a function with LRU cache
- * @param fn - Function to memoize
- * @param maxSize - Maximum cache size
- * @returns Memoized function
- */
 export function memoize<TArgs extends readonly unknown[], TReturn>(
   fn: (...args: TArgs) => TReturn,
   maxSize: number = 100
@@ -280,37 +194,18 @@ export function memoize<TArgs extends readonly unknown[], TReturn>(
   };
 }
 
-/**
- * Get the current timestamp in ISO format
- * @returns ISO timestamp
- */
 export function getTimestamp(): string {
   return new Date().toISOString();
 }
 
-/**
- * Capitalize the first letter of a string
- * @param str - String to capitalize
- * @returns Capitalized string
- */
 export function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/**
- * Convert snake_case to camelCase
- * @param str - Snake case string
- * @returns Camel case string
- */
 export function snakeToCamel(str: string): string {
   return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
 }
 
-/**
- * Convert camelCase to snake_case
- * @param str - Camel case string
- * @returns Snake case string
- */
 export function camelToSnake(str: string): string {
   return str.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
 }

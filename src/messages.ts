@@ -1,9 +1,3 @@
-/**
- * Message management for LLM conversations
- * Handles conversation history, message formatting, and context management
- * Based on NVIDIA's implementation with context trimming support
- */
-
 import type {
   Message,
   MessageRole,
@@ -15,26 +9,13 @@ import type {
   UserMessage
 } from './types.js';
 
-/**
- * Context trimming separator (NVIDIA's approach)
- * Uses special character ς to mark context boundaries
- */
 const CONTEXT_SEPARATOR = 'ς';
 
-/**
- * Message manager class for maintaining conversation state
- * Provides type-safe message handling and conversation context
- */
 export class MessageManager {
   private _systemMessage: BaseMessage | null = null;
   private _messages: Message[] = [];
   private _maxMessages: number;
 
-  /**
-   * Initialize the message manager
-   * @param systemPrompt - System message to set the context
-   * @param maxMessages - Maximum number of messages to retain (default: 50)
-   */
   constructor(systemPrompt: string = '', maxMessages: number = 50) {
     this._maxMessages = maxMessages;
     if (systemPrompt) {
@@ -42,10 +23,6 @@ export class MessageManager {
     }
   }
 
-  /**
-   * Set or update the system message
-   * @param message - System message content
-   */
   setSystemMessage(message: string): void {
     this._systemMessage = {
       role: 'system',
@@ -53,19 +30,10 @@ export class MessageManager {
     };
   }
 
-  /**
-   * Get the current system message
-   * @returns System message or null if not set
-   */
   getSystemMessage(): BaseMessage | null {
     return this._systemMessage;
   }
 
-  /**
-   * Add a user message to the conversation
-   * @param content - User message content
-   * @param metadata - Optional metadata for the message
-   */
   addUserMessage(content: string, metadata?: Record<string, unknown>): void {
     const message: UserMessage = {
       role: 'user',
@@ -76,11 +44,6 @@ export class MessageManager {
     this.trimMessages();
   }
 
-  /**
-   * Add an assistant message to the conversation
-   * @param content - Assistant message content
-   * @param toolCalls - Optional tool calls made by the assistant
-   */
   addAssistantMessage(content: string, toolCalls?: ToolCall[]): void {
     const message: AssistantMessage = {
       role: 'assistant',
@@ -92,11 +55,6 @@ export class MessageManager {
     this.trimMessages();
   }
 
-  /**
-   * Add a tool result message to the conversation
-   * @param content - Tool result content
-   * @param toolCallId - ID of the tool call this result belongs to
-   */
   addToolMessage(content: string, toolCallId: string): void {
     const message: ToolMessage = {
       role: 'tool',
@@ -108,10 +66,6 @@ export class MessageManager {
     this.trimMessages();
   }
 
-  /**
-   * Get all messages formatted for API consumption
-   * @returns Array of messages with system message included
-   */
   getMessages(): Message[] {
     if (!this._systemMessage) {
       return this._messages;
@@ -120,19 +74,10 @@ export class MessageManager {
     return this._systemMessage ? [{ ...this._systemMessage, role: 'system' as const }, ...this._messages] : this._messages;
   }
 
-  /**
-   * Get the last n messages from the conversation
-   * @param count - Number of messages to retrieve
-   * @returns Array of the last n messages
-   */
   getLastMessages(count: number): Message[] {
     return this._messages.slice(-count);
   }
 
-  /**
-   * Get the most recent user message
-   * @returns Last user message or null if none exists
-   */
   getLastUserMessage(): UserMessage | null {
     for (let i = this._messages.length - 1; i >= 0; i--) {
       const message = this._messages[i];
@@ -143,10 +88,6 @@ export class MessageManager {
     return null;
   }
 
-  /**
-   * Get the most recent assistant message
-   * @returns Last assistant message or null if none exists
-   */
   getLastAssistantMessage(): AssistantMessage | null {
     for (let i = this._messages.length - 1; i >= 0; i--) {
       const message = this._messages[i];
@@ -157,10 +98,6 @@ export class MessageManager {
     return null;
   }
 
-  /**
-   * Get all tool calls in the conversation
-   * @returns Array of all tool calls made
-   */
   getAllToolCalls(): ToolCall[] {
     const allToolCalls: ToolCall[] = [];
 
@@ -176,10 +113,6 @@ export class MessageManager {
     return allToolCalls;
   }
 
-  /**
-   * Count messages by role
-   * @returns Object with message counts by role
-   */
   getMessageCounts(): Record<MessageRole, number> {
     const counts = {
       system: 0,
@@ -199,10 +132,6 @@ export class MessageManager {
     return counts;
   }
 
-  /**
-   * Check if the conversation has tool calls awaiting results
-   * @returns True if there are pending tool calls
-   */
   hasPendingToolCalls(): boolean {
     const lastMessage = this._messages[this._messages.length - 1];
     if (!lastMessage || lastMessage.role !== 'assistant') {
@@ -213,27 +142,15 @@ export class MessageManager {
     return toolCalls ? toolCalls.length > 0 : false;
   }
 
-  /**
-   * Clear all messages except the system message
-   */
   clearMessages(): void {
     this._messages = [];
   }
 
-  /**
-   * Clear the entire conversation including system message
-   */
   reset(): void {
     this._systemMessage = null;
     this._messages = [];
   }
 
-  /**
-   * Trim messages to stay within the maximum limit
-   * Uses NVIDIA's context trimming approach with special separator
-   * Preserves important context by keeping system and recent messages
-   * @private
-   */
   private trimMessages(): void {
     if (this._messages.length <= this._maxMessages) {
       return;
@@ -266,10 +183,6 @@ export class MessageManager {
     }
   }
 
-  /**
-   * Export conversation to JSON for debugging or persistence
-   * @returns JSON string representation of the conversation
-   */
   exportConversation(): string {
     return JSON.stringify({
       systemMessage: this._systemMessage,
@@ -279,11 +192,6 @@ export class MessageManager {
     }, null, 2);
   }
 
-  /**
-   * Import conversation from JSON
-   * @param json - JSON string representation of conversation
-   * @throws {Error} If JSON is invalid
-   */
   importConversation(json: string): void {
     try {
       const data = JSON.parse(json);
@@ -303,10 +211,6 @@ export class MessageManager {
     }
   }
 
-  /**
-   * Get conversation statistics
-   * @returns Statistics about the conversation
-   */
   getStats(): {
     totalMessages: number;
     messageCounts: Record<MessageRole, number>;
@@ -321,10 +225,6 @@ export class MessageManager {
     };
   }
 
-  /**
-   * Format the last assistant response for display
-   * @returns Formatted response string or null
-   */
   getLastResponse(): string | null {
     const lastAssistant = this.getLastAssistantMessage();
     if (!lastAssistant) {
@@ -340,10 +240,6 @@ export class MessageManager {
     return content || null;
   }
 
-  /**
-   * Check if the conversation is empty (no user messages)
-   * @returns True if no user messages have been sent
-   */
   isEmpty(): boolean {
     return this._messages.length === 0 ||
            !this._messages.some(m => m.role === 'user');
