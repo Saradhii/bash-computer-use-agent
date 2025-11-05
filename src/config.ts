@@ -42,6 +42,7 @@ const DEFAULT_ALLOWED_COMMANDS = Object.freeze([
   // File operations
   'cd', 'cp', 'ls', 'cat', 'find', 'touch', 'echo', 'grep', 'pwd', 'mkdir',
   'sort', 'head', 'tail', 'du', 'wc', 'which', 'whereis', 'file', 'less', 'more',
+  'tee', 'nl', 'pr', 'expand', 'fmt', 'fold',
 
   // Directory navigation and viewing
   'dirs', 'pushd', 'popd', 'tree',
@@ -54,30 +55,45 @@ const DEFAULT_ALLOWED_COMMANDS = Object.freeze([
 
   // Text processing and manipulation
   'sed', 'awk', 'tr', 'cut', 'uniq', 'xargs', 'paste', 'join',
+  'jq',  // JSON processor (if installed)
+  'yq',  // YAML processor (if installed)
 
   // System information
   'date', 'whoami', 'uname', 'df', 'ps', 'top', 'uptime', 'free', 'lsof',
+  'env', 'printenv', 'id', 'groups', 'last', 'w',
 
   // Development tools
   'python', 'python3', 'pip', 'pip3', 'node', 'npm', 'yarn', 'pnpm',
+  'npx', 'yarn dlx', 'pnpm dlx',
 
   // Version control
   'git', 'gh', 'svn', 'hg',
+  'git log', 'git status', 'git diff', 'git show', 'git blame',
 
   // Archive and compression
-  'tar', 'zip', 'unzip', 'gzip', 'gunzip', 'bzip2',
+  'tar', 'zip', 'unzip', 'gzip', 'gunzip', 'bzip2', 'bunzip2',
 
   // Process management (read-only)
   'ps', 'top', 'htop', 'pgrep', 'pidof',
+  'pstree', 'jobs', 'fg', 'bg',
 
   // File permissions (viewing only)
-  'ls -l', 'stat', 'getfacl',
+  'ls -l', 'stat', 'getfacl', 'lsattr',
 
   // Search utilities
-  'find', 'locate', 'which', 'whereis',
+  'find', 'locate', 'which', 'whereis', 'grep -r', 'rg', 'ag',
 
   // System monitoring (read-only)
   'iostat', 'vmstat', 'sar', 'sysctl',
+
+  // Safe redirection commands
+  '>', '>>', '<', '2>', '2>>', '&>', '&>>',
+
+  // Safe pipe operators
+  '|', '&&', '||',
+
+  // Temporary file creation
+  'mktemp', 'tempfile', 'with-tempfile',
 ] as const);
 
 const DEFAULT_SECURITY_CONFIG: SecurityConfig = Object.freeze({
@@ -181,13 +197,17 @@ const DEFAULT_SECURITY_CONFIG: SecurityConfig = Object.freeze({
     />\s*\/(dev|proc|sys)/,
     />>\s*\/(dev|proc|sys)/,
 
-    // Prevent background execution
+    // Prevent only dangerous background execution (allow & after grep, xargs, etc)
     /&\s*$/,
-    /\s&&\s/,
-    /\s\|\|\s/,
+
+    // Allow && and || as they are safe operators
+    // /\s&&\s/,
+    // /\s\|\|\s/,
+
+    // Prevent only semicolons at end of command
     /;\s*$/,
   ]),
-  allowPipesAndRedirects: false,
+  allowPipesAndRedirects: true,
   commandTimeout: 30000, // 30 seconds
 });
 
@@ -311,11 +331,32 @@ The bash interpreter's output and current working directory will be given to you
 command is executed. Take that into account for the next conversation.
 If there was an error during execution, tell the user what that error was exactly.
 
+For complex tasks, break them down into steps:
+1. Analyze what the user wants to accomplish
+2. Plan the sequence of commands needed
+3. Execute one command at a time
+4. Use temporary files (mktemp) to store intermediate results if needed
+5. Use pipes (|) and redirections (>, >>) to chain commands safely
+6. Verify each step before proceeding
+
 You are only allowed to execute the following commands. Break complex tasks into shorter commands from this list:
 
 \`\`\`
 ${this._security.allowedCommands.join(', ')}
 \`\`\`
+
+**NEW CAPABILITIES:**
+- You CAN now use pipes (|) to chain commands safely
+- You CAN use redirections (>, >>) to save output to files
+- You CAN use && and || for conditional execution
+- You CAN use mktemp to create temporary files for intermediate results
+
+**TIPS FOR COMPLEX TASKS:**
+- For data processing: Use pipes to chain commands (e.g., "cat file.json | jq .key")
+- For analysis: Save intermediate results to temp files (e.g., "mktemp")
+- For searching: Use grep with patterns and pipes (e.g., "ls -la | grep '\\.js$'")
+- For counting: Use wc with pipes (e.g., "find . -name '*.ts' | wc -l")
+- For JSON processing: Use jq if available, or use grep/cut for simple extraction
 
 **Never** attempt to execute a command not in this list. **Never** attempt to execute dangerous commands
 like \`rm\`, \`mv\`, \`rmdir\`, \`sudo\`, \`chmod\`, \`chown\`, etc. If the user asks you to do so, politely refuse.

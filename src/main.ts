@@ -38,7 +38,7 @@ class CLIApplication {
       this._config = getConfig(modelName);
       this._bash = new Bash(this._config);
       this._llm = new LLMClient(this._config);
-      this._messages = new MessageManager(this._config.systemPrompt, 50);
+      this._messages = new MessageManager(this._config.systemPrompt, 200);
 
       // Register command prompt for history support
       inquirer.registerPrompt('command', commandPrompt);
