@@ -1,0 +1,16 @@
+name = "cua-proxy"
+main = "worker.ts"
+compatibility_date = "2024-01-01"
+
+[vars]
+RATE_LIMIT_PER_HOUR = "30"
+MAX_TOKENS_PER_REQUEST = "4096"
+ALLOWED_MODELS = "meta-llama/llama-3.3-70b-instruct:free,nvidia/nemotron-nano-9b-v2:free,deepseek/deepseek-chat:free"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT_KV"
+id = "YOUR_KV_NAMESPACE_ID"
+
+# Secrets (set via `wrangler secret put`):
+# OPENROUTER_API_KEY — your OpenRouter API key
+# ADMIN_SECRET — optional admin key for stats

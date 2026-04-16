@@ -6,7 +6,7 @@ import type {
   ToolMessage,
   ToolCall,
   SystemMessage,
-  UserMessage
+  UserMessage,
 } from './types.js';
 
 const CONTEXT_SEPARATOR = 'ς';
@@ -71,7 +71,9 @@ export class MessageManager {
       return this._messages;
     }
 
-    return this._systemMessage ? [{ ...this._systemMessage, role: 'system' as const }, ...this._messages] : this._messages;
+    return this._systemMessage
+      ? [{ ...this._systemMessage, role: 'system' as const }, ...this._messages]
+      : this._messages;
   }
 
   getLastMessages(count: number): Message[] {
@@ -178,18 +180,23 @@ export class MessageManager {
       // Add separator as a system message to indicate context break
       this._messages.unshift({
         role: 'system',
-        content: `${CONTEXT_SEPARATOR} Context trimmed: ${excess} messages removed to maintain conversation history ${CONTEXT_SEPARATOR}`
+        content: `${CONTEXT_SEPARATOR} Context trimmed: ${excess} messages removed to maintain conversation history ${CONTEXT_SEPARATOR}`,
       });
     }
   }
 
-  exportConversation(): string {
-    return JSON.stringify({
+  exportConversation(): {
+    systemMessage: BaseMessage | null;
+    messages: Message[];
+    timestamp: string;
+    messageCount: number;
+  } {
+    return {
       systemMessage: this._systemMessage,
       messages: this._messages,
       timestamp: new Date().toISOString(),
       messageCount: this._messages.length,
-    }, null, 2);
+    };
   }
 
   importConversation(json: string): void {
@@ -241,7 +248,6 @@ export class MessageManager {
   }
 
   isEmpty(): boolean {
-    return this._messages.length === 0 ||
-           !this._messages.some(m => m.role === 'user');
+    return this._messages.length === 0 || !this._messages.some((m) => m.role === 'user');
   }
 }
